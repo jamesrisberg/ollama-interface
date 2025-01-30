@@ -76,6 +76,19 @@
         max-width: 100%;
       }
 
+      /* Line break and paragraph spacing control */
+      .message-content br {
+        content: '';
+        display: block;
+        margin: 0.6em 0;
+      }
+
+      /* Preserve normal line height in code blocks */
+      pre br,
+      pre br + br {
+        margin: 0;
+      }
+
       .think {
         font-style: italic;
         color: #bababa;
@@ -84,7 +97,20 @@
         padding-left: 1.5em;
         overflow: hidden;
         transition: max-height 0.3s ease-out;
-        max-height: none;
+      }
+
+      .think::after {
+        content: '';
+        position: absolute;
+        left: 0.4em; /* Center it with the arrow */
+        top: 1.5em; /* Start below the arrow */
+        bottom: 0;
+        width: 4px;
+        background-color: var(--washColor);
+      }
+
+      .think.collapsed::after {
+        display: none;
       }
 
       .think-sentence {
@@ -101,6 +127,34 @@
       .think-sentence:hover {
         background-color: var(--washColor);
         border-radius: 3px;
+      }
+
+      /* Collapse Styles */
+      .think.collapsed {
+        max-height: 1.5em;
+      }
+
+      .think.collapsing {
+        transition: max-height 0.3s ease-out;
+      }
+
+      .think::before {
+        content: '▼';
+        position: absolute;
+        left: 0;
+        top: 0.2em;
+        font-size: 0.8em;
+        transition: transform 0.3s ease;
+        cursor: pointer;
+        line-height: 1;
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        text-align: center;
+      }
+
+      .think.collapsed::before {
+        transform: rotate(-90deg);
       }
 
       .feedback-popup {
@@ -446,6 +500,10 @@
           border-color: var(--washColorDark);
           color: var(--txtColorDark);
         }
+
+        .think::after {
+          background-color: var(--washColorDark);
+        }
       }
     </style>
   </head>
@@ -598,7 +656,7 @@
           const { done, value } = await reader.read();
           if (done) {
             // After response is complete, collapse think divs
-            setTimeout(() => collapseThinkDivs(assistantMessageElement), 100);
+            // setTimeout(() => collapseThinkDivs(assistantMessageElement), 100);
             break;
           }
           const chunk = new TextDecoder().decode(value);
@@ -796,7 +854,6 @@
 
     // Function to collapse think divs
     function collapseThinkDivs(container) {
-      return;
       container.querySelectorAll('.think:not(.collapsed)').forEach(thinkDiv => {
         handleThinkTransition(thinkDiv, true);
       });
@@ -884,18 +941,26 @@
     settingsMenu.insertBefore(modelSelector, systemPromptButton);
 
     // Add click handler for think divs
-    // document.addEventListener('click', e => {
-    //   if (e.target.classList.contains('think') || e.target.closest('.think')) {
-    //     const thinkDiv = e.target.classList.contains('think')
-    //       ? e.target
-    //       : e.target.closest('.think');
+    document.addEventListener('click', e => {
+      // Don't collapse if clicking on a think-sentence or feedback popup
+      if (
+        e.target.classList.contains('think-sentence') ||
+        feedbackPopup.contains(e.target)
+      ) {
+        return;
+      }
 
-    //     handleThinkTransition(
-    //       thinkDiv,
-    //       !thinkDiv.classList.contains('collapsed')
-    //     );
-    //   }
-    // });
+      if (e.target.classList.contains('think') || e.target.closest('.think')) {
+        const thinkDiv = e.target.classList.contains('think')
+          ? e.target
+          : e.target.closest('.think');
+
+        handleThinkTransition(
+          thinkDiv,
+          !thinkDiv.classList.contains('collapsed')
+        );
+      }
+    });
 
     // Add feedback functionality
     const feedbackPopup = document.getElementById('feedback-popup');
@@ -970,14 +1035,9 @@
             }:{sentence:"${sentence.textContent.trim()}",comment:"${feedback}"}`;
           })
           .join(',');
-        console.log(feedbackText);
         // Add feedback as user message with improved formatting and hidden markers
         const feedbackMessage = `<FEEDBACK_START> Process this set of feedback items on your reasoning process before responding: {${feedbackText}}<FEEDBACK_END>\nConsidering the feedback, reconsider your response to my question: "${lastUserMessage}"`;
-        console.log(feedbackMessage);
-        // Create a textarea to preserve newlines
-        const tempTextArea = document.createElement('textarea');
-        tempTextArea.value = feedbackMessage;
-        promptInput.value = tempTextArea.value;
+        promptInput.value = feedbackMessage;
         handleSubmit(new Event('submit'));
 
         // Reset feedback state and remove visual indicators
@@ -995,7 +1055,7 @@
     const originalHandleSubmit = handleSubmit;
     handleSubmit = e => {
       const prompt = promptInput.value.trim();
-      if (!prompt.includes("Here's my feedback on your thought process")) {
+      if (!prompt.includes('<FEEDBACK_START>')) {
         lastUserMessage = prompt;
       }
       originalHandleSubmit(e);

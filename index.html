@@ -129,6 +129,11 @@
         border-radius: 3px;
       }
 
+      .think-sentence.selected {
+        background-color: var(--washColor);
+        border-radius: 3px;
+      }
+
       /* Collapse Styles */
       .think.collapsed {
         max-height: 1.5em;
@@ -166,8 +171,6 @@
         box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
         z-index: 1000;
         display: none;
-        min-width: 200px;
-        max-width: 300px;
       }
 
       .feedback-popup.show {
@@ -175,7 +178,8 @@
       }
 
       .feedback-input {
-        width: 100%;
+        width: 250px;
+        height: 150px;
         padding: 0.5em;
         border: 1px solid var(--washColor);
         border-radius: 0.3em;
@@ -184,12 +188,18 @@
         font-size: 0.9em;
         background-color: var(--bgColor);
         color: var(--txtColor);
+        resize: both;
+      }
+
+      .feedback-input:focus {
+        outline: none;
+        border-color: var(--washColor);
       }
 
       .feedback-buttons {
         display: flex;
-        justify-content: flex-end;
-        gap: 0.5em;
+        justify-content: center;
+        gap: 1em;
       }
 
       .feedback-submit {
@@ -977,6 +987,8 @@
         e.stopPropagation();
         currentFeedbackTarget = sentence;
 
+        sentence.classList.add('selected');
+
         // Position and show feedback popup at cursor position
         feedbackPopup.style.top = `${e.pageY + 5}px`;
         feedbackPopup.style.left = `${e.pageX + 5}px`;
@@ -992,11 +1004,29 @@
 
     // Handle feedback popup buttons
     document.querySelector('.cancel-feedback').addEventListener('click', () => {
-      feedbackPopup.classList.remove('show');
-      currentFeedbackTarget = null;
+      cancelFeedback();
     });
 
     document.querySelector('.save-feedback').addEventListener('click', () => {
+      saveFeedback();
+    });
+
+    // Add keyboard handlers for the feedback popup
+    feedbackInput.addEventListener('keydown', e => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        cancelFeedback();
+      } else if (e.key === 'Enter' && e.shiftKey) {
+        e.preventDefault();
+        feedbackInput.value += '\n';
+      } else if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        saveFeedback();
+      }
+    });
+
+    // Extract save feedback logic into a function
+    function saveFeedback() {
       if (currentFeedbackTarget && feedbackInput.value.trim()) {
         feedbackData.set(
           currentFeedbackTarget.dataset.sentenceId,
@@ -1006,9 +1036,16 @@
         currentFeedbackTarget.classList.add('has-feedback');
         feedbackSubmitBtn.classList.add('show');
       }
+      cancelFeedback();
+    }
+
+    function cancelFeedback() {
       feedbackPopup.classList.remove('show');
-      currentFeedbackTarget = null;
-    });
+      if (currentFeedbackTarget) {
+        currentFeedbackTarget.classList.remove('selected');
+        currentFeedbackTarget = null;
+      }
+    }
 
     // Close feedback popup when clicking outside
     document.addEventListener('click', e => {
@@ -1016,8 +1053,7 @@
         !feedbackPopup.contains(e.target) &&
         !e.target.classList.contains('think-sentence')
       ) {
-        feedbackPopup.classList.remove('show');
-        currentFeedbackTarget = null;
+        cancelFeedback();
       }
     });
 
@@ -1060,12 +1096,6 @@
       }
       originalHandleSubmit(e);
     };
-
-    // Close feedback popup when scrolling
-    chatContainer.addEventListener('scroll', () => {
-      feedbackPopup.classList.remove('show');
-      currentFeedbackTarget = null;
-    });
 
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {

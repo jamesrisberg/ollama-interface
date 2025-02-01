@@ -554,12 +554,17 @@
     <!-- Feedback Popup -->
     <div id="feedback-popup" class="feedback-popup">
       <textarea
+        id="feedback-input"
         class="feedback-input"
         placeholder="Enter your feedback..."
       ></textarea>
       <div class="feedback-buttons">
-        <button type="button" class="cancel-feedback">Cancel</button>
-        <button type="button" class="save-feedback">Save</button>
+        <button type="button" id="cancel-feedback" class="cancel-feedback">
+          Cancel
+        </button>
+        <button type="button" id="save-feedback" class="save-feedback">
+          Save
+        </button>
       </div>
     </div>
 
@@ -569,12 +574,29 @@
     </button>
   </body>
   <script>
+    // DOM Elements
+    const elements = {
+      form: document.getElementById('prompt-form'),
+      input: document.getElementById('prompt-input'),
+      chatContainer: document.getElementById('chat-container'),
+      modelSelector: document.getElementById('model-selector'),
+      settingsButton: document.getElementById('settings-button'),
+      settingsMenu: document.getElementById('settings-menu'),
+      systemPromptButton: document.getElementById('system-prompt-button'),
+      systemPromptModal: document.getElementById('system-prompt-modal'),
+      systemPromptTextarea: document.getElementById('system-prompt-textarea'),
+      cancelSystemPromptButton: document.getElementById('cancel-system-prompt'),
+      saveSystemPromptButton: document.getElementById('save-system-prompt'),
+      feedbackPopup: document.getElementById('feedback-popup'),
+      feedbackInput: document.getElementById('feedback-input'),
+      cancelFeedbackButton: document.getElementById('cancel-feedback'),
+      saveFeedbackButton: document.getElementById('save-feedback'),
+      feedbackSubmitButton: document.getElementById('feedback-submit'),
+    };
+
     let currentModel = 'deepseek-r1:8b';
     let SYSTEM_PROMPT = `Be as helpful as possible.`;
 
-    const form = document.getElementById('prompt-form');
-    const promptInput = document.getElementById('prompt-input');
-    const chatContainer = document.getElementById('chat-container');
     let conversationHistory = [
       {
         role: 'system',
@@ -584,7 +606,7 @@
 
     // Focus the input field when the page loads
     window.addEventListener('load', () => {
-      promptInput.focus();
+      elements.input.focus();
       fetchAvailableModels();
     });
 
@@ -596,34 +618,33 @@
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        const modelSelector = document.getElementById('model-selector');
-        modelSelector.innerHTML = data.models
+        elements.modelSelector.innerHTML = data.models
           .map(model => `<option value="${model.name}">${model.name}</option>`)
           .join('');
 
         // Set the initial model if it exists in the list
         if (data.models.some(model => model.name === currentModel)) {
-          modelSelector.value = currentModel;
+          elements.modelSelector.value = currentModel;
         } else if (data.models.length > 0) {
           currentModel = data.models[0].name;
-          modelSelector.value = currentModel;
+          elements.modelSelector.value = currentModel;
         }
 
         updatePlaceholder();
       } catch (error) {
         console.error('Error fetching models:', error);
-        document.getElementById('model-selector').innerHTML =
+        elements.modelSelector.innerHTML =
           '<option value="deepseek-r1:8b">deepseek-r1:8b</option>';
       }
     }
 
     // Function to update input placeholder
     function updatePlaceholder() {
-      promptInput.placeholder = `Send a message to ${currentModel}`;
+      elements.input.placeholder = `Send a message to ${currentModel}`;
     }
 
     // Add event listener for model selection
-    document.getElementById('model-selector').addEventListener('change', e => {
+    elements.modelSelector.addEventListener('change', e => {
       currentModel = e.target.value;
       updatePlaceholder();
     });
@@ -631,7 +652,7 @@
     // Handle form submission
     async function handleSubmit(e) {
       e.preventDefault();
-      const prompt = promptInput.value.trim();
+      const prompt = elements.input.value.trim();
       if (!prompt) return; // Don't submit if the prompt is empty
 
       // Add user message to the chat container
@@ -640,7 +661,7 @@
       // Add user message to conversation history
       conversationHistory.push({ role: 'user', content: prompt });
 
-      promptInput.value = ''; // Clear the input field
+      elements.input.value = ''; // Clear the input field
 
       try {
         const response = await fetch('http://localhost:11434/api/chat', {
@@ -665,21 +686,19 @@
         while (true) {
           const { done, value } = await reader.read();
           if (done) {
-            // After response is complete, collapse think divs
-            // setTimeout(() => collapseThinkDivs(assistantMessageElement), 100);
             break;
           }
           const chunk = new TextDecoder().decode(value);
           const lines = chunk.split('\n');
           for (const line of lines) {
-            if (line.trim() !== '') {
-              const parsedLine = JSON.parse(line);
-              if (parsedLine.message?.content) {
-                assistantResponse += parsedLine.message.content;
-                assistantMessageElement.innerHTML =
-                  formatMessage(assistantResponse);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-              }
+            if (!line.trim()) continue;
+            const parsedLine = JSON.parse(line);
+            if (parsedLine.message?.content) {
+              assistantResponse += parsedLine.message.content;
+              assistantMessageElement.innerHTML =
+                formatMessage(assistantResponse);
+              elements.chatContainer.scrollTop =
+                elements.chatContainer.scrollHeight;
             }
           }
         }
@@ -696,7 +715,7 @@
         );
       } finally {
         // Refocus the input field after submission
-        promptInput.focus();
+        elements.input.focus();
       }
     }
 
@@ -758,8 +777,8 @@
         div.appendChild(contentDiv);
       }
 
-      chatContainer.appendChild(div);
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      elements.chatContainer.appendChild(div);
+      elements.chatContainer.scrollTop = elements.chatContainer.scrollHeight;
       return div.querySelector('.message-content') || div;
     }
 
@@ -879,83 +898,67 @@
     }
 
     // Handle form submission
-    form.addEventListener('submit', handleSubmit);
+    elements.form.addEventListener('submit', handleSubmit);
 
     // Handle Enter key press
-    promptInput.addEventListener('keydown', e => {
+    elements.input.addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault(); // Prevent default to avoid newline
         handleSubmit(e);
       }
     });
 
-    // Settings menu functionality
-    const settingsButton = document.getElementById('settings-button');
-    const settingsMenu = document.getElementById('settings-menu');
-    const systemPromptButton = document.getElementById('system-prompt-button');
-    const systemPromptModal = document.getElementById('system-prompt-modal');
-    const systemPromptTextarea = document.getElementById(
-      'system-prompt-textarea'
-    );
-    const cancelSystemPromptButton = document.getElementById(
-      'cancel-system-prompt'
-    );
-    const saveSystemPromptButton =
-      document.getElementById('save-system-prompt');
-
-    // Toggle settings menu
-    settingsButton.addEventListener('click', e => {
+    // Settings Menu Events
+    elements.settingsButton.addEventListener('click', e => {
       e.stopPropagation();
-      settingsMenu.classList.toggle('show');
+      elements.settingsMenu.classList.toggle('show');
     });
 
-    // Close settings menu when clicking outside
     document.addEventListener('click', e => {
-      if (!settingsMenu.contains(e.target) && e.target !== settingsButton) {
-        settingsMenu.classList.remove('show');
+      if (
+        !elements.settingsMenu.contains(e.target) &&
+        e.target !== elements.settingsButton
+      ) {
+        elements.settingsMenu.classList.remove('show');
       }
     });
 
-    // System prompt modal functionality
-    systemPromptButton.addEventListener('click', () => {
-      systemPromptTextarea.value = SYSTEM_PROMPT.trim();
-      systemPromptModal.classList.add('show');
-      settingsMenu.classList.remove('show');
+    // System Prompt Events
+    elements.systemPromptButton.addEventListener('click', () => {
+      elements.systemPromptTextarea.value = SYSTEM_PROMPT.trim();
+      elements.systemPromptModal.classList.add('show');
+      elements.settingsMenu.classList.remove('show');
     });
 
-    cancelSystemPromptButton.addEventListener('click', () => {
-      systemPromptModal.classList.remove('show');
+    elements.cancelSystemPromptButton.addEventListener('click', () => {
+      elements.systemPromptModal.classList.remove('show');
     });
 
-    saveSystemPromptButton.addEventListener('click', () => {
-      SYSTEM_PROMPT = systemPromptTextarea.value;
-      // Reset conversation history with new system prompt
-      conversationHistory = [
-        {
-          role: 'system',
-          content: SYSTEM_PROMPT,
-        },
-      ];
-      systemPromptModal.classList.remove('show');
+    elements.saveSystemPromptButton.addEventListener('click', () => {
+      SYSTEM_PROMPT = elements.systemPromptTextarea.value;
+      conversationHistory = [{ role: 'system', content: SYSTEM_PROMPT }];
+      elements.systemPromptModal.classList.remove('show');
     });
 
     // Close modal when clicking outside
-    systemPromptModal.addEventListener('click', e => {
+    elements.systemPromptModal.addEventListener('click', e => {
       if (e.target === systemPromptModal) {
-        systemPromptModal.classList.remove('show');
+        elements.systemPromptModal.classList.remove('show');
       }
     });
 
     // Move model selector to settings menu
-    const modelSelector = document.getElementById('model-selector');
-    settingsMenu.insertBefore(modelSelector, systemPromptButton);
+    elements.settingsMenu.insertBefore(
+      elements.modelSelector,
+      elements.systemPromptButton
+    );
 
     // Add click handler for think divs
     document.addEventListener('click', e => {
       // Don't collapse if clicking on a think-sentence or feedback popup
       if (
         e.target.classList.contains('think-sentence') ||
-        feedbackPopup.contains(e.target)
+        elements.feedbackPopup.contains(e.target)
       ) {
         return;
       }
@@ -973,9 +976,7 @@
     });
 
     // Add feedback functionality
-    const feedbackPopup = document.getElementById('feedback-popup');
-    const feedbackInput = feedbackPopup.querySelector('.feedback-input');
-    const feedbackSubmitBtn = document.getElementById('feedback-submit');
+
     let currentFeedbackTarget = null;
     let feedbackData = new Map();
     let lastUserMessage = '';
@@ -990,35 +991,35 @@
         sentence.classList.add('selected');
 
         // Position and show feedback popup at cursor position
-        feedbackPopup.style.top = `${e.pageY + 5}px`;
-        feedbackPopup.style.left = `${e.pageX + 5}px`;
+        elements.feedbackPopup.style.top = `${e.pageY + 5}px`;
+        elements.feedbackPopup.style.left = `${e.pageX + 5}px`;
 
         // Show existing feedback if any
         const existingFeedback = feedbackData.get(sentence.dataset.sentenceId);
-        feedbackInput.value = existingFeedback || '';
+        elements.feedbackInput.value = existingFeedback || '';
 
-        feedbackPopup.classList.add('show');
-        feedbackInput.focus();
+        elements.feedbackPopup.classList.add('show');
+        elements.feedbackInput.focus();
       }
     });
 
     // Handle feedback popup buttons
-    document.querySelector('.cancel-feedback').addEventListener('click', () => {
+    elements.cancelFeedbackButton.addEventListener('click', () => {
       cancelFeedback();
     });
 
-    document.querySelector('.save-feedback').addEventListener('click', () => {
+    elements.saveFeedbackButton.addEventListener('click', () => {
       saveFeedback();
     });
 
     // Add keyboard handlers for the feedback popup
-    feedbackInput.addEventListener('keydown', e => {
+    elements.feedbackInput.addEventListener('keydown', e => {
       if (e.key === 'Escape') {
         e.preventDefault();
         cancelFeedback();
       } else if (e.key === 'Enter' && e.shiftKey) {
         e.preventDefault();
-        feedbackInput.value += '\n';
+        elements.feedbackInput.value += '\n';
       } else if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         saveFeedback();
@@ -1027,20 +1028,20 @@
 
     // Extract save feedback logic into a function
     function saveFeedback() {
-      if (currentFeedbackTarget && feedbackInput.value.trim()) {
+      if (currentFeedbackTarget && elements.feedbackInput.value.trim()) {
         feedbackData.set(
           currentFeedbackTarget.dataset.sentenceId,
-          feedbackInput.value.trim()
+          elements.feedbackInput.value.trim()
         );
         // Add visual feedback indicator
         currentFeedbackTarget.classList.add('has-feedback');
-        feedbackSubmitBtn.classList.add('show');
+        elements.feedbackSubmitBtn.classList.add('show');
       }
       cancelFeedback();
     }
 
     function cancelFeedback() {
-      feedbackPopup.classList.remove('show');
+      elements.feedbackPopup.classList.remove('show');
       if (currentFeedbackTarget) {
         currentFeedbackTarget.classList.remove('selected');
         currentFeedbackTarget = null;
@@ -1050,7 +1051,7 @@
     // Close feedback popup when clicking outside
     document.addEventListener('click', e => {
       if (
-        !feedbackPopup.contains(e.target) &&
+        !elements.feedbackPopup.contains(e.target) &&
         !e.target.classList.contains('think-sentence')
       ) {
         cancelFeedback();
@@ -1058,7 +1059,7 @@
     });
 
     // Handle feedback submission
-    feedbackSubmitBtn.addEventListener('click', () => {
+    elements.feedbackSubmitButton.addEventListener('click', () => {
       if (feedbackData.size > 0) {
         // Format feedback data in a more readable way
         const feedbackText = Array.from(feedbackData.entries())
@@ -1073,7 +1074,7 @@
           .join(',');
         // Add feedback as user message with improved formatting and hidden markers
         const feedbackMessage = `<FEEDBACK_START> Process this set of feedback items on your reasoning process before responding: {${feedbackText}}<FEEDBACK_END>\nConsidering the feedback, reconsider your response to my question: "${lastUserMessage}"`;
-        promptInput.value = feedbackMessage;
+        elements.input.value = feedbackMessage;
         handleSubmit(new Event('submit'));
 
         // Reset feedback state and remove visual indicators
@@ -1083,14 +1084,14 @@
             sentence.classList.remove('has-feedback');
           });
         feedbackData.clear();
-        feedbackSubmitBtn.classList.remove('show');
+        elements.feedbackSubmitButton.classList.remove('show');
       }
     });
 
     // Store last user message for feedback context
     const originalHandleSubmit = handleSubmit;
     handleSubmit = e => {
-      const prompt = promptInput.value.trim();
+      const prompt = elements.input.value.trim();
       if (!prompt.includes('<FEEDBACK_START>')) {
         lastUserMessage = prompt;
       }

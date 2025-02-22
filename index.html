@@ -10,19 +10,29 @@
       content="A simple interface for Ollama-served models."
     />
     <style>
-      /* Reset, defaults, etc. */
+      /* CSS Custom Properties */
+      :root {
+        --bg-color-light: #ffffff;
+        --wash-color-light: #ededed;
+        --text-color-light: #1a1818;
+        --bg-color-dark: #1a1818;
+        --wash-color-dark: #2d2d2d;
+        --text-color-dark: #ffffff;
+        --font-family: serif;
+        --border-radius: 1.11em;
+        --spacing-sm: 0.5em;
+        --spacing-md: 0.88em;
+        --spacing-lg: 1em;
+      }
 
+      /* Base Reset */
       * {
-        --bgColor: #ffffff; /* Default light background color */
-        --washColor: #ededed;
-        --txtColor: #1a1818; /* Default light text color */
         margin: 0;
         padding: 0;
         box-sizing: border-box;
       }
 
-      /* Chat container styling */
-
+      /* Layout */
       html,
       body {
         height: 100%;
@@ -32,29 +42,30 @@
       body {
         display: flex;
         flex-direction: column;
-        background-color: var(--bgColor);
-        color: var(--txtColor);
-        font-family: serif;
-        -webkit-font-smoothing: antialiased;
+        background-color: var(--bg-color-light);
+        color: var(--text-color-light);
+        font-family: var(--font-family);
         font-size: 1.23em;
+        -webkit-font-smoothing: antialiased;
       }
 
+      /* Chat Layout */
       #chat-container {
         flex-grow: 1;
         overflow-y: auto;
-        padding: 1em 1em 0 1em;
+        padding: var(--spacing-lg) var(--spacing-lg) 0;
       }
 
-      /* Chat message styling */
+      #input-container {
+        padding: var(--spacing-lg);
+        position: relative;
+        backdrop-filter: blur(33px);
+        -webkit-backdrop-filter: blur(33px);
+      }
 
+      /* Messages */
       .message {
-        padding: 0.5em 0;
-      }
-
-      .think {
-        font-style: italic;
-        color: #bababa;
-        margin: 1em 0;
+        padding: var(--spacing-sm) 0;
       }
 
       .message:last-child {
@@ -69,57 +80,45 @@
         text-align: left;
       }
 
-      /* Chat input styling */
-
-      #input-container {
-        padding: 1em;
-        position: relative;
-        backdrop-filter: blur(33px);
-        -webkit-backdrop-filter: blur(33px);
+      .think {
+        font-style: italic;
+        color: #bababa;
+        margin: var(--spacing-lg) 0;
       }
 
+      /* Form Elements */
       form {
         display: flex;
-        gap: 0.44em 0.44em;
+        gap: 0.44em;
         max-width: 100%;
+      }
+
+      /* Common styles for interactive elements */
+      #prompt-input,
+      select,
+      button {
+        border: none;
+        outline: none;
+        font-family: var(--font-family);
+        font-size: 1em;
+        background-color: var(--wash-color-light);
+        border-radius: var(--border-radius);
       }
 
       #prompt-input {
         flex: 1;
-        margin-right: 0;
-        padding: 0.88em 1.11em;
-        border: none;
-        outline: none;
-        font-family: serif;
-        font-size: 1em;
-        color: var(--txtColor);
-        background-color: var(--washColor);
-        border-radius: 1.11em;
+        padding: var(--spacing-md) var(--border-radius);
+        color: var(--text-color-light);
       }
 
       select {
-        margin-right: 0;
-        padding: 0.5em 1.11em;
-        border: none;
-        outline: none;
-        font-size: 1em;
-        font-family: serif;
-        background-color: var(--washColor);
-        border-radius: 1.11em;
-        -webkit-appearance: none;
-        -moz-appearance: none;
+        padding: var(--spacing-sm) var(--border-radius);
         appearance: none;
         cursor: pointer;
       }
 
       button {
-        padding: 0.5em 1.11em;
-        border: none;
-        outline: none;
-        font-size: 1em;
-        font-family: serif;
-        background-color: var(--washColor);
-        border-radius: 1.11em;
+        padding: var(--spacing-sm) var(--border-radius);
         cursor: pointer;
       }
 
@@ -128,36 +127,12 @@
         opacity: 0.8;
       }
 
-      /* Mobile layout */
-      @media (max-width: 600px) {
-        form {
-          flex-wrap: wrap;
-        }
-
-        #prompt-input {
-          min-width: 100%;
-          flex: 1 1 100%;
-        }
-
-        select {
-          flex: 1;
-          min-width: 0;
-          padding: 0.9em 1.11em;
-        }
-
-        button {
-          flex: 0 0 auto;
-          padding: 0.9em 1.11em;
-        }
-      }
-
-      /* Code + preformatted text styles */
-
+      /* Code Formatting */
       pre {
-        background-color: var(--washColor);
-        border-radius: 1.11em;
-        padding: 1em;
-        margin: 0.5em 0;
+        background-color: var(--wash-color-light);
+        border-radius: var(--border-radius);
+        padding: var(--spacing-lg);
+        margin: var(--spacing-sm) 0;
         overflow-x: auto;
       }
 
@@ -171,50 +146,55 @@
       }
 
       :not(pre) > code {
-        background-color: var(--washColor);
+        background-color: var(--wash-color-light);
         padding: 0.2em 0.4em;
         border-radius: 3px;
       }
 
-      /* Dark mode styles */
-
-      @media (prefers-color-scheme: dark) {
-        * {
-          --bgColorDark: #1a1818; /* Default dark background color */
-          --washColorDark: #2d2d2d;
-          --txtColorDark: #ffffff; /* Default dark text color */
+      /* Mobile Layout */
+      @media (max-width: 600px) {
+        form {
+          flex-wrap: wrap;
         }
 
-        body {
-          background-color: var(--bgColorDark);
-          color: var(--txtColorDark);
-        }
-        button,
-        select {
-          color: var(--txtColorDark);
-          background-color: var(--washColorDark);
-        }
         #prompt-input {
-          color: var(--txtColorDark);
-          background-color: var(--washColorDark);
+          min-width: 100%;
+          flex: 1 1 100%;
         }
 
-        /* Dark mode styles for code formatting */
+        select {
+          flex: 1;
+          min-width: 0;
+        }
+
+        select,
+        button {
+          padding: 0.9em var(--border-radius);
+        }
+      }
+
+      /* Dark Mode */
+      @media (prefers-color-scheme: dark) {
+        body {
+          background-color: var(--bg-color-dark);
+          color: var(--text-color-dark);
+        }
+
+        #prompt-input,
+        select,
+        button,
+        pre,
+        :not(pre) > code {
+          background-color: var(--wash-color-dark);
+          color: var(--text-color-dark);
+        }
+
         pre {
-          background-color: var(--washColorDark);
           border-color: #444;
         }
 
-        code {
-          color: var(--txtColorDark);
-        }
-
-        :not(pre) > code {
-          background-color: var(--washColorDark);
-        }
-
         .think {
-          color: #999999; /* Lighter gray for dark mode */
+          color: #999999;
         }
       }
     </style>

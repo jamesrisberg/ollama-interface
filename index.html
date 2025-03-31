@@ -115,6 +115,10 @@
         padding: var(--spacing-sm) var(--border-radius);
         appearance: none;
         cursor: pointer;
+        max-width: 200px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
       }
 
       button {
@@ -165,6 +169,7 @@
         select {
           flex: 1;
           min-width: 0;
+          max-width: none;
         }
 
         select,
@@ -222,7 +227,16 @@
   </body>
   <script>
     let currentModel = "deepseek-r1:8b";
-    const SYSTEM_PROMPT = `
+
+    // Add configuration object for customizable variables
+    const CONFIG = {
+      aiName: "Oh",
+      userName: "Edouard",
+      // Add other configurable variables here
+    };
+
+    // Template literal function to replace variables in the system prompt
+    const formatSystemPrompt = (config) => `
         Your name is Oh.
         You will respond in a moderately friendly and straightforward manner.
         Your primary goal is to act as a helpful entity, providing information and answering questions to the best of your ability.
@@ -232,9 +246,15 @@
         For inline code or short code snippets, use single backticks (\`).
         `;
 
-    const form = document.getElementById("prompt-form");
-    const promptInput = document.getElementById("prompt-input");
-    const chatContainer = document.getElementById("chat-container");
+    const SYSTEM_PROMPT = formatSystemPrompt(CONFIG);
+
+    const DOM = {
+      form: document.getElementById("prompt-form"),
+      input: document.getElementById("prompt-input"),
+      chat: document.getElementById("chat-container"),
+      modelSelector: document.getElementById("model-selector"),
+    };
+
     let conversationHistory = [
       {
         role: "system",
@@ -244,9 +264,32 @@
 
     // Focus the input field when the page loads
     window.addEventListener("load", () => {
-      promptInput.focus();
+      DOM.input.focus();
       fetchAvailableModels();
     });
+
+    // Modify the scrollToBottom function to be more responsive during streaming
+    const scrollToBottom = (() => {
+      let timeoutId;
+      let isStreaming = false;
+
+      const scroll = () => {
+        DOM.chat.scrollTop = DOM.chat.scrollHeight;
+      };
+
+      return (streaming = false) => {
+        isStreaming = streaming;
+
+        if (isStreaming) {
+          // During streaming, scroll immediately
+          scroll();
+        } else {
+          // When not streaming, use debouncing
+          clearTimeout(timeoutId);
+          timeoutId = setTimeout(scroll, 50);
+        }
+      };
+    })();
 
     // Function to fetch available models from Ollama
     async function fetchAvailableModels() {
@@ -255,108 +298,116 @@
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        const data = await response.json();
-        const modelSelector = document.getElementById("model-selector");
-        modelSelector.innerHTML = data.models
-          .map(
-            (model) => `<option value="${model.name}">${model.name}</option>`
-          )
+        const { models } = await response.json();
+
+        DOM.modelSelector.innerHTML = models
+          .map(({ name }) => `<option value="${name}">${name}</option>`)
           .join("");
 
-        // Set the initial model if it exists in the list
-        if (data.models.some((model) => model.name === currentModel)) {
-          modelSelector.value = currentModel;
-        } else if (data.models.length > 0) {
-          currentModel = data.models[0].name;
-          modelSelector.value = currentModel;
-        }
+        // Set initial model
+        currentModel =
+          models.find((model) => model.name === currentModel)?.name ||
+          models[0]?.name ||
+          "deepseek-r1:8b";
 
+        DOM.modelSelector.value = currentModel;
         updatePlaceholder();
       } catch (error) {
         console.error("Error fetching models:", error);
-        document.getElementById("model-selector").innerHTML =
+        DOM.modelSelector.innerHTML =
           '<option value="deepseek-r1:8b">deepseek-r1:8b</option>';
       }
     }
 
     // Function to update input placeholder
     function updatePlaceholder() {
-      promptInput.placeholder = `Send a message to ${currentModel}`;
+      DOM.input.placeholder = `Send a message to ${currentModel}`;
     }
 
     // Add event listener for model selection
-    document
-      .getElementById("model-selector")
-      .addEventListener("change", (e) => {
-        currentModel = e.target.value;
-        updatePlaceholder();
-      });
+    DOM.modelSelector.addEventListener("change", (e) => {
+      currentModel = e.target.value;
+      updatePlaceholder();
+    });
 
-    // Handle form submission
+    // Optimized chat submission handler
+    let currentChatController = null;
+
     async function handleSubmit(e) {
       e.preventDefault();
-      const prompt = promptInput.value.trim();
-      if (!prompt) return; // Don't submit if the prompt is empty
+      const prompt = DOM.input.value.trim();
+      if (!prompt) return;
 
-      // Add user message to the chat container
+      // Cancel any ongoing request
+      if (currentChatController) {
+        currentChatController.abort();
+      }
+      currentChatController = new AbortController();
+
       addMessageToChat("user", prompt);
-
-      // Add user message to conversation history
       conversationHistory.push({ role: "user", content: prompt });
-
-      promptInput.value = ""; // Clear the input field
+      DOM.input.value = "";
 
       try {
         const response = await fetch("http://localhost:11434/api/chat", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             model: currentModel,
             messages: conversationHistory,
           }),
+          signal: currentChatController.signal,
         });
-        if (!response.ok) {
+
+        if (!response.ok)
           throw new Error(`HTTP error! status: ${response.status}`);
-        }
+
         const reader = response.body.getReader();
         let assistantResponse = "";
-
-        // Create a new message element for the assistant's response
         const assistantMessageElement = addMessageToChat("assistant", "");
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const chunk = new TextDecoder().decode(value);
-          const lines = chunk.split("\n");
-          for (const line of lines) {
-            if (line.trim() !== "") {
-              const parsedLine = JSON.parse(line);
-              if (parsedLine.message?.content) {
-                assistantResponse += parsedLine.message.content;
+
+          const chunks = new TextDecoder().decode(value).split("\n");
+          for (const chunk of chunks) {
+            if (!chunk.trim()) continue;
+
+            try {
+              const { message } = JSON.parse(chunk);
+              if (message?.content) {
+                assistantResponse += message.content;
                 assistantMessageElement.innerHTML =
                   formatMessage(assistantResponse);
-                chatContainer.scrollTop = chatContainer.scrollHeight;
+                scrollToBottom(true); // Pass true to indicate streaming
               }
+            } catch (parseError) {
+              console.warn("Failed to parse chunk:", parseError);
             }
           }
         }
-        // Add assistant's complete response to conversation history
+
+        // Final scroll after streaming is complete
+        scrollToBottom(false);
+
         conversationHistory.push({
           role: "assistant",
           content: assistantResponse,
         });
       } catch (error) {
+        if (error.name === "AbortError") {
+          console.log("Request cancelled");
+          return;
+        }
         console.error("Error:", error);
         addMessageToChat(
           "error",
           `An error occurred: ${error.message}<br>Make sure Ollama is running and accessible at http://localhost:11434`
         );
       } finally {
-        // Refocus the input field after submission
-        promptInput.focus();
+        currentChatController = null;
+        DOM.input.focus();
       }
     }
 
@@ -364,34 +415,31 @@
       const messageDiv = document.createElement("div");
       messageDiv.classList.add("message", `${role}-message`);
       messageDiv.innerHTML = formatMessage(content);
-      chatContainer.appendChild(messageDiv);
-      chatContainer.scrollTop = chatContainer.scrollHeight;
+      DOM.chat.appendChild(messageDiv);
+      scrollToBottom();
       return messageDiv; // Return the created element
     }
 
+    // Optimized message formatting
     function formatMessage(content) {
-      // Handle <think> tags first
-      content = content.replace(
-        /<think>([\s\S]*?)<\/think>/g,
-        '<p class="think">$1</p>'
+      if (!content) return "";
+
+      const replacements = [
+        [/<think>([\s\S]*?)<\/think>/g, '<p class="think">$1</p>'],
+        [
+          /```(\w*)\n([\s\S]*?)```/g,
+          (_, lang, code) =>
+            `<pre><code class="language-${lang}">${escapeHtml(
+              code.trim()
+            )}</code></pre>`,
+        ],
+        [/`([^`\n]+)`/g, (_, code) => `<code>${escapeHtml(code)}</code>`],
+      ];
+
+      return replacements.reduce(
+        (text, [regex, replacement]) => text.replace(regex, replacement),
+        content
       );
-
-      // Replace triple backticks with <pre><code> blocks
-      content = content.replace(
-        /```(\w*)\n([\s\S]*?)```/g,
-        (match, language, code) => {
-          return `<pre><code class="language-${language}">${escapeHtml(
-            code.trim()
-          )}</code></pre>`;
-        }
-      );
-
-      // Replace single backticks with <code> inline
-      content = content.replace(/`([^`\n]+)`/g, (match, code) => {
-        return `<code>${escapeHtml(code)}</code>`;
-      });
-
-      return content;
     }
 
     function escapeHtml(unsafe) {
@@ -403,13 +451,12 @@
         .replace(/'/g, "&#039;");
     }
 
-    // Handle form submission
-    form.addEventListener("submit", handleSubmit);
+    // Event Listeners
+    DOM.form.addEventListener("submit", handleSubmit);
 
-    // Handle Enter key press
-    promptInput.addEventListener("keydown", (e) => {
+    DOM.input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault(); // Prevent default to avoid newline
+        e.preventDefault();
         handleSubmit(e);
       }
     });

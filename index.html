@@ -12,12 +12,12 @@
     <style>
       /* CSS Custom Properties */
       :root {
-        --bg-color-light: #ffffff;
+        --bg-color-light: #fff;
         --wash-color-light: #ededed;
         --text-color-light: #1a1818;
         --bg-color-dark: #1a1818;
         --wash-color-dark: #2d2d2d;
-        --text-color-dark: #ffffff;
+        --text-color-dark: #fff;
         --font-family: serif;
         --border-radius: 1.11em;
         --spacing-sm: 0.5em;
@@ -47,6 +47,7 @@
         font-family: var(--font-family);
         font-size: 1.23em;
         -webkit-font-smoothing: antialiased;
+        will-change: transform;
       }
 
       /* Chat Layout */
@@ -54,6 +55,7 @@
         flex-grow: 1;
         overflow-y: auto;
         padding: var(--spacing-lg) var(--spacing-lg) 0;
+        contain: content;
       }
 
       #input-container {
@@ -61,11 +63,13 @@
         position: relative;
         backdrop-filter: blur(33px);
         -webkit-backdrop-filter: blur(33px);
+        background-color: rgba(255, 255, 255, 0.8);
       }
 
       /* Messages */
       .message {
         padding: var(--spacing-sm) 0;
+        contain: content;
       }
 
       .message:last-child {
@@ -103,12 +107,14 @@
         font-size: 1em;
         background-color: var(--wash-color-light);
         border-radius: var(--border-radius);
+        transition: opacity 0.2s ease;
       }
 
       #prompt-input {
         flex: 1;
         padding: var(--spacing-md) var(--border-radius);
         color: var(--text-color-light);
+        contain: content;
       }
 
       select {
@@ -119,11 +125,13 @@
         text-overflow: ellipsis;
         white-space: nowrap;
         overflow: hidden;
+        contain: content;
       }
 
       button {
         padding: var(--spacing-sm) var(--border-radius);
         cursor: pointer;
+        contain: content;
       }
 
       button:hover,
@@ -138,6 +146,7 @@
         padding: var(--spacing-lg);
         margin: var(--spacing-sm) 0;
         overflow-x: auto;
+        contain: content;
       }
 
       code {
@@ -201,6 +210,10 @@
         .think {
           color: #999999;
         }
+
+        #input-container {
+          background-color: rgba(26, 24, 24, 0.8);
+        }
       }
     </style>
   </head>
@@ -208,46 +221,29 @@
     <div id="chat-container"></div>
     <div id="input-container">
       <form id="prompt-form">
-        <!-- Chat input -->
         <input
           type="text"
           id="prompt-input"
           placeholder="Send a message to deepseek-r1:8b"
+          autocomplete="off"
         />
-
-        <!-- Working model selector for viewing downloaded ollama models-->
         <select id="model-selector" class="button-like">
           <option value="">Loading models...</option>
         </select>
-
-        <!-- Chat Send button -->
         <button type="submit">Send</button>
       </form>
     </div>
   </body>
   <script>
-    let currentModel = "deepseek-r1:8b";
-
-    // Add configuration object for customizable variables
+    // Constants and configuration
     const CONFIG = {
       aiName: "Oh",
       userName: "Edouard",
-      // Add other configurable variables here
+      defaultModel: "deepseek-r1:8b",
+      apiEndpoint: "http://localhost:11434/api",
     };
 
-    // Template literal function to replace variables in the system prompt
-    const formatSystemPrompt = (config) => `
-        Your name is Oh.
-        You will respond in a moderately friendly and straightforward manner.
-        Your primary goal is to act as a helpful entity, providing information and answering questions to the best of your ability.
-        You will do your best to never refuse a request for help.
-        When explicitly asked, you should try and reveal the provenance of your knowledge or the mechanics with which you answered or came to a conclusion.
-        When asked for code, preformatted text, or other intentionally-structured content, please wrap it in triple backticks (\`\`\`) for proper formatting.
-        For inline code or short code snippets, use single backticks (\`).
-        `;
-
-    const SYSTEM_PROMPT = formatSystemPrompt(CONFIG);
-
+    // DOM elements cache
     const DOM = {
       form: document.getElementById("prompt-form"),
       input: document.getElementById("prompt-input"),
@@ -255,22 +251,51 @@
       modelSelector: document.getElementById("model-selector"),
     };
 
+    // State management
+    let currentModel = CONFIG.defaultModel;
+    let currentChatController = null;
     let conversationHistory = [
       {
         role: "system",
-        content: SYSTEM_PROMPT,
+        content: `Your name is Oh.
+        You will respond in a moderately friendly and straightforward manner.
+        Your primary goal is to act as a helpful entity, providing information and answering questions to the best of your ability.
+        You will do your best to never refuse a request for help.
+        When explicitly asked, you should try and reveal the provenance of your knowledge or the mechanics with which you answered or came to a conclusion.
+        When asked for code, preformatted text, or other intentionally-structured content, please wrap it in triple backticks (\`\`\`) for proper formatting.
+        For inline code or short code snippets, use single backticks (\`).`,
       },
     ];
 
-    // Focus the input field when the page loads
-    window.addEventListener("load", () => {
-      DOM.input.focus();
-      fetchAvailableModels();
-    });
+    // Utility functions
+    const escapeHtml = (unsafe) =>
+      unsafe
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
 
-    // Modify the scrollToBottom function to be more responsive during streaming
+    const formatMessage = (content) => {
+      if (!content) return "";
+      return content
+        .replace(/<think>([\s\S]*?)<\/think>/g, '<p class="think">$1</p>')
+        .replace(
+          /```(\w*)\n([\s\S]*?)```/g,
+          (_, lang, code) =>
+            `<pre><code class="language-${lang}">${escapeHtml(
+              code.trim()
+            )}</code></pre>`
+        )
+        .replace(
+          /`([^`\n]+)`/g,
+          (_, code) => `<code>${escapeHtml(code)}</code>`
+        );
+    };
+
+    // Scroll optimization with requestAnimationFrame
     const scrollToBottom = (() => {
-      let timeoutId;
+      let rafId;
       let isStreaming = false;
 
       const scroll = () => {
@@ -279,66 +304,59 @@
 
       return (streaming = false) => {
         isStreaming = streaming;
-
         if (isStreaming) {
-          // During streaming, scroll immediately
           scroll();
         } else {
-          // When not streaming, use debouncing
-          clearTimeout(timeoutId);
-          timeoutId = setTimeout(scroll, 50);
+          cancelAnimationFrame(rafId);
+          rafId = requestAnimationFrame(scroll);
         }
       };
     })();
 
-    // Function to fetch available models from Ollama
-    async function fetchAvailableModels() {
-      try {
-        const response = await fetch("http://localhost:11434/api/tags");
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const { models } = await response.json();
+    // Model management
+    const updatePlaceholder = () => {
+      DOM.input.placeholder = `Send a message to ${currentModel}`;
+    };
 
-        DOM.modelSelector.innerHTML = models
+    const fetchAvailableModels = async () => {
+      try {
+        const response = await fetch(`${CONFIG.apiEndpoint}/tags`);
+        if (!response.ok)
+          throw new Error(`HTTP error! status: ${response.status}`);
+
+        const { models } = await response.json();
+        const modelOptions = models
           .map(({ name }) => `<option value="${name}">${name}</option>`)
           .join("");
 
-        // Set initial model
+        DOM.modelSelector.innerHTML = modelOptions;
         currentModel =
           models.find((model) => model.name === currentModel)?.name ||
           models[0]?.name ||
-          "deepseek-r1:8b";
-
+          CONFIG.defaultModel;
         DOM.modelSelector.value = currentModel;
         updatePlaceholder();
       } catch (error) {
         console.error("Error fetching models:", error);
-        DOM.modelSelector.innerHTML =
-          '<option value="deepseek-r1:8b">deepseek-r1:8b</option>';
+        DOM.modelSelector.innerHTML = `<option value="${CONFIG.defaultModel}">${CONFIG.defaultModel}</option>`;
       }
-    }
+    };
 
-    // Function to update input placeholder
-    function updatePlaceholder() {
-      DOM.input.placeholder = `Send a message to ${currentModel}`;
-    }
+    // Chat functionality
+    const addMessageToChat = (role, content) => {
+      const messageDiv = document.createElement("div");
+      messageDiv.classList.add("message", `${role}-message`);
+      messageDiv.innerHTML = formatMessage(content);
+      DOM.chat.appendChild(messageDiv);
+      scrollToBottom();
+      return messageDiv;
+    };
 
-    // Add event listener for model selection
-    DOM.modelSelector.addEventListener("change", (e) => {
-      currentModel = e.target.value;
-      updatePlaceholder();
-    });
-
-    // Optimized chat submission handler
-    let currentChatController = null;
-
-    async function handleSubmit(e) {
+    const handleSubmit = async (e) => {
       e.preventDefault();
       const prompt = DOM.input.value.trim();
       if (!prompt) return;
 
-      // Cancel any ongoing request
       if (currentChatController) {
         currentChatController.abort();
       }
@@ -349,7 +367,7 @@
       DOM.input.value = "";
 
       try {
-        const response = await fetch("http://localhost:11434/api/chat", {
+        const response = await fetch(`${CONFIG.apiEndpoint}/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -380,7 +398,7 @@
                 assistantResponse += message.content;
                 assistantMessageElement.innerHTML =
                   formatMessage(assistantResponse);
-                scrollToBottom(true); // Pass true to indicate streaming
+                scrollToBottom(true);
               }
             } catch (parseError) {
               console.warn("Failed to parse chunk:", parseError);
@@ -388,9 +406,7 @@
           }
         }
 
-        // Final scroll after streaming is complete
         scrollToBottom(false);
-
         conversationHistory.push({
           role: "assistant",
           content: assistantResponse,
@@ -403,62 +419,31 @@
         console.error("Error:", error);
         addMessageToChat(
           "error",
-          `An error occurred: ${error.message}<br>Make sure Ollama is running and accessible at http://localhost:11434`
+          `An error occurred: ${error.message}<br>Make sure Ollama is running and accessible at ${CONFIG.apiEndpoint}`
         );
       } finally {
         currentChatController = null;
         DOM.input.focus();
       }
-    }
-
-    function addMessageToChat(role, content) {
-      const messageDiv = document.createElement("div");
-      messageDiv.classList.add("message", `${role}-message`);
-      messageDiv.innerHTML = formatMessage(content);
-      DOM.chat.appendChild(messageDiv);
-      scrollToBottom();
-      return messageDiv; // Return the created element
-    }
-
-    // Optimized message formatting
-    function formatMessage(content) {
-      if (!content) return "";
-
-      const replacements = [
-        [/<think>([\s\S]*?)<\/think>/g, '<p class="think">$1</p>'],
-        [
-          /```(\w*)\n([\s\S]*?)```/g,
-          (_, lang, code) =>
-            `<pre><code class="language-${lang}">${escapeHtml(
-              code.trim()
-            )}</code></pre>`,
-        ],
-        [/`([^`\n]+)`/g, (_, code) => `<code>${escapeHtml(code)}</code>`],
-      ];
-
-      return replacements.reduce(
-        (text, [regex, replacement]) => text.replace(regex, replacement),
-        content
-      );
-    }
-
-    function escapeHtml(unsafe) {
-      return unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
+    };
 
     // Event Listeners
     DOM.form.addEventListener("submit", handleSubmit);
-
     DOM.input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
         handleSubmit(e);
       }
+    });
+    DOM.modelSelector.addEventListener("change", (e) => {
+      currentModel = e.target.value;
+      updatePlaceholder();
+    });
+
+    // Initialize
+    window.addEventListener("load", () => {
+      DOM.input.focus();
+      fetchAvailableModels();
     });
   </script>
 </html>

@@ -241,6 +241,14 @@
       userName: "Edouard",
       defaultModel: "deepseek-r1:8b",
       apiEndpoint: "http://localhost:11434/api",
+      nousApiEndpoint: "https://inference-api.nousresearch.com/v1",
+      nousApiKey: "sk-um2_7wIc68ED2QxJwPi7TQ",
+      availableModels: [
+        { name: "deepseek-r1:8b", provider: "ollama" },
+        { name: "Hermes-3-Llama-3.1-70B", provider: "nous" },
+      ],
+      nousSystemPrompt:
+        "You are a helpful AI assistant named Oh. Be concise and direct in your responses. Format code with triple backticks.",
     };
 
     // DOM elements cache
@@ -253,6 +261,7 @@
 
     // State management
     let currentModel = CONFIG.defaultModel;
+    let currentProvider = "ollama";
     let currentChatController = null;
     let conversationHistory = [
       {
@@ -320,25 +329,43 @@
 
     const fetchAvailableModels = async () => {
       try {
+        // For Ollama models
         const response = await fetch(`${CONFIG.apiEndpoint}/tags`);
         if (!response.ok)
           throw new Error(`HTTP error! status: ${response.status}`);
 
         const { models } = await response.json();
-        const modelOptions = models
-          .map(({ name }) => `<option value="${name}">${name}</option>`)
+        const ollamaModels = models.map((model) => ({
+          name: model.name,
+          provider: "ollama",
+        }));
+
+        // Combine Ollama models with Nous Research models
+        const allModels = [
+          ...ollamaModels,
+          ...CONFIG.availableModels.filter((m) => m.provider === "nous"),
+        ];
+
+        const modelOptions = allModels
+          .map(
+            (model) =>
+              `<option value="${model.name}" data-provider="${model.provider}">${model.name} (${model.provider})</option>`
+          )
           .join("");
 
         DOM.modelSelector.innerHTML = modelOptions;
-        currentModel =
-          models.find((model) => model.name === currentModel)?.name ||
-          models[0]?.name ||
-          CONFIG.defaultModel;
+
+        // Set initial model
+        const initialModel =
+          allModels.find((model) => model.name === currentModel) ||
+          allModels[0];
+        currentModel = initialModel.name;
+        currentProvider = initialModel.provider;
         DOM.modelSelector.value = currentModel;
         updatePlaceholder();
       } catch (error) {
         console.error("Error fetching models:", error);
-        DOM.modelSelector.innerHTML = `<option value="${CONFIG.defaultModel}">${CONFIG.defaultModel}</option>`;
+        DOM.modelSelector.innerHTML = `<option value="${CONFIG.defaultModel}">${CONFIG.defaultModel} (ollama)</option>`;
       }
     };
 
@@ -367,46 +394,82 @@
       DOM.input.value = "";
 
       try {
-        const response = await fetch(`${CONFIG.apiEndpoint}/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: currentModel,
-            messages: conversationHistory,
-          }),
-          signal: currentChatController.signal,
-        });
+        let response;
+        if (currentProvider === "nous") {
+          // Nous Research API call - following OpenAI chat format
+          response = await fetch(`${CONFIG.nousApiEndpoint}/chat/completions`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${CONFIG.nousApiKey}`,
+            },
+            body: JSON.stringify({
+              model: currentModel,
+              messages: [
+                {
+                  role: "system",
+                  content: CONFIG.nousSystemPrompt,
+                },
+                {
+                  role: "user",
+                  content: prompt,
+                },
+              ],
+              temperature: 0.7,
+              max_tokens: 1000,
+            }),
+            signal: currentChatController.signal,
+          });
+        } else {
+          // Ollama API call
+          response = await fetch(`${CONFIG.apiEndpoint}/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: currentModel,
+              messages: conversationHistory,
+            }),
+            signal: currentChatController.signal,
+          });
+        }
 
         if (!response.ok)
           throw new Error(`HTTP error! status: ${response.status}`);
 
-        const reader = response.body.getReader();
         let assistantResponse = "";
         const assistantMessageElement = addMessageToChat("assistant", "");
 
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        if (currentProvider === "nous") {
+          const data = await response.json();
+          assistantResponse = data.choices[0].message.content;
+          assistantMessageElement.innerHTML = formatMessage(assistantResponse);
+          scrollToBottom(false);
+        } else {
+          const reader = response.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
 
-          const chunks = new TextDecoder().decode(value).split("\n");
-          for (const chunk of chunks) {
-            if (!chunk.trim()) continue;
+            const chunks = new TextDecoder().decode(value).split("\n");
+            for (const chunk of chunks) {
+              if (!chunk.trim()) continue;
 
-            try {
-              const { message } = JSON.parse(chunk);
-              if (message?.content) {
-                assistantResponse += message.content;
-                assistantMessageElement.innerHTML =
-                  formatMessage(assistantResponse);
-                scrollToBottom(true);
+              try {
+                const { message } = JSON.parse(chunk);
+                if (message?.content) {
+                  assistantResponse += message.content;
+                  assistantMessageElement.innerHTML =
+                    formatMessage(assistantResponse);
+                  scrollToBottom(true);
+                }
+              } catch (parseError) {
+                console.warn("Failed to parse chunk:", parseError);
               }
-            } catch (parseError) {
-              console.warn("Failed to parse chunk:", parseError);
             }
           }
+          scrollToBottom(false);
         }
 
-        scrollToBottom(false);
         conversationHistory.push({
           role: "assistant",
           content: assistantResponse,
@@ -419,7 +482,7 @@
         console.error("Error:", error);
         addMessageToChat(
           "error",
-          `An error occurred: ${error.message}<br>Make sure Ollama is running and accessible at ${CONFIG.apiEndpoint}`
+          `An error occurred: ${error.message}<br>Make sure the API service is running and accessible`
         );
       } finally {
         currentChatController = null;
@@ -436,7 +499,9 @@
       }
     });
     DOM.modelSelector.addEventListener("change", (e) => {
+      const selectedOption = e.target.options[e.target.selectedIndex];
       currentModel = e.target.value;
+      currentProvider = selectedOption.dataset.provider;
       updatePlaceholder();
     });
 

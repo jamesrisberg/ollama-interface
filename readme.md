@@ -18,4 +18,4 @@ A: I was finding myself in a position to start experimenting with very specific 
 
 Q: How do I get started?
 
-A: Be sure to get [Ollama](https://ollama.com) first. Clone this repo and run `python -m http.server 8888` or similar to get started prompting. `http://localhost:8888` should show the chat interface.
+A: Be sure to get [Ollama](https://ollama.com) first and download a model or two. Clone this repo and run `npm i` to install limited dependencies for working with `.env` files and to run the codel locally. In a terminal, run `npm start` to begin. `http://localhost:8888` should show the chat interface by default.

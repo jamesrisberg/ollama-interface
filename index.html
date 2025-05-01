@@ -95,6 +95,7 @@
         display: flex;
         gap: 0.44em;
         max-width: 100%;
+        align-items: flex-end;
       }
 
       /* Common styles for interactive elements */
@@ -115,23 +116,29 @@
         padding: var(--spacing-md) var(--border-radius);
         color: var(--text-color-light);
         contain: content;
+        resize: none;
+        overflow-y: auto;
+        line-height: 1.2em;
+        max-height: calc(1.2em * 5 + var(--spacing-md) * 2);
       }
 
       select {
-        padding: var(--spacing-sm) var(--border-radius);
+        padding: var(--spacing-md) var(--border-radius);
         appearance: none;
         cursor: pointer;
-        max-width: 200px;
+        max-width: 333px;
         text-overflow: ellipsis;
         white-space: nowrap;
         overflow: hidden;
         contain: content;
+        align-self: flex-end;
       }
 
       button {
-        padding: var(--spacing-sm) var(--border-radius);
+        padding: var(--spacing-md) var(--border-radius);
         cursor: pointer;
         contain: content;
+        align-self: flex-end;
       }
 
       button:hover,
@@ -221,12 +228,12 @@
     <div id="chat-container"></div>
     <div id="input-container">
       <form id="prompt-form">
-        <input
-          type="text"
+        <textarea
           id="prompt-input"
-          placeholder="Send a message to deepseek-r1:8b"
+          rows="1"
+          placeholder="Loading models..."
           autocomplete="off"
-        />
+        ></textarea>
         <select id="model-selector" class="button-like">
           <option value="">Loading models...</option>
         </select>
@@ -239,16 +246,17 @@
     const CONFIG = {
       aiName: "Oh",
       userName: "Edouard",
-      defaultModel: "deepseek-r1:8b",
+      defaultModel: "",
       apiEndpoint: "http://localhost:11434/api",
-      nousApiEndpoint: "https://inference-api.nousresearch.com/v1",
-      nousApiKey: "sk-um2_7wIc68ED2QxJwPi7TQ",
-      availableModels: [
-        { name: "deepseek-r1:8b", provider: "ollama" },
-        { name: "Hermes-3-Llama-3.1-70B", provider: "nous" },
-      ],
-      nousSystemPrompt:
-        "You are a helpful AI assistant named Oh. Be concise and direct in your responses. Format code with triple backticks.",
+      nousApiEndpoint: "/nous",
+      availableModels: [{ name: "Hermes-3-Llama-3.1-70B", provider: "nous" }],
+      systemPrompt: `Your name is Oh.
+You will respond in a moderately friendly and straightforward manner.
+Your primary goal is to act as a helpful entity, providing information and answering questions to the best of your ability.
+You will do your best to never refuse a request for help.
+When explicitly asked, you should try and reveal the provenance of your knowledge or the mechanics with which you answered or came to a conclusion.
+When asked for code, preformatted text, or other intentionally-structured content, please wrap it in triple backticks (\`\`\`) for proper formatting.
+For inline code or short code snippets, use single backticks (\`).`,
     };
 
     // DOM elements cache
@@ -266,13 +274,7 @@
     let conversationHistory = [
       {
         role: "system",
-        content: `Your name is Oh.
-        You will respond in a moderately friendly and straightforward manner.
-        Your primary goal is to act as a helpful entity, providing information and answering questions to the best of your ability.
-        You will do your best to never refuse a request for help.
-        When explicitly asked, you should try and reveal the provenance of your knowledge or the mechanics with which you answered or came to a conclusion.
-        When asked for code, preformatted text, or other intentionally-structured content, please wrap it in triple backticks (\`\`\`) for proper formatting.
-        For inline code or short code snippets, use single backticks (\`).`,
+        content: CONFIG.systemPrompt,
       },
     ];
 
@@ -324,7 +326,9 @@
 
     // Model management
     const updatePlaceholder = () => {
-      DOM.input.placeholder = `Send a message to ${currentModel}`;
+      DOM.input.placeholder = currentModel
+        ? `Send a message to ${currentModel}`
+        : "Download ollama models to chat";
     };
 
     const fetchAvailableModels = async () => {
@@ -340,11 +344,20 @@
           provider: "ollama",
         }));
 
-        // Combine Ollama models with Nous Research models
+        // Combine Ollama models with Nous Research models (if any configured)
         const allModels = [
           ...ollamaModels,
           ...CONFIG.availableModels.filter((m) => m.provider === "nous"),
         ];
+
+        if (allModels.length === 0) {
+          // No models available
+          DOM.modelSelector.innerHTML = `<option value="">Download ollama models to chat</option>`;
+          currentModel = "";
+          currentProvider = "ollama";
+          updatePlaceholder();
+          return;
+        }
 
         const modelOptions = allModels
           .map(
@@ -355,17 +368,18 @@
 
         DOM.modelSelector.innerHTML = modelOptions;
 
-        // Set initial model
+        // Set initial model: prefer first Ollama model, otherwise first available
         const initialModel =
-          allModels.find((model) => model.name === currentModel) ||
-          allModels[0];
+          ollamaModels.length > 0 ? ollamaModels[0] : allModels[0];
         currentModel = initialModel.name;
         currentProvider = initialModel.provider;
         DOM.modelSelector.value = currentModel;
         updatePlaceholder();
       } catch (error) {
         console.error("Error fetching models:", error);
-        DOM.modelSelector.innerHTML = `<option value="${CONFIG.defaultModel}">${CONFIG.defaultModel} (ollama)</option>`;
+        DOM.modelSelector.innerHTML = `<option value="">Download ollama models to chat</option>`;
+        currentModel = "";
+        updatePlaceholder();
       }
     };
 
@@ -401,20 +415,10 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${CONFIG.nousApiKey}`,
             },
             body: JSON.stringify({
               model: currentModel,
-              messages: [
-                {
-                  role: "system",
-                  content: CONFIG.nousSystemPrompt,
-                },
-                {
-                  role: "user",
-                  content: prompt,
-                },
-              ],
+              messages: conversationHistory,
               temperature: 0.7,
               max_tokens: 1000,
             }),
@@ -504,6 +508,19 @@
       currentProvider = selectedOption.dataset.provider;
       updatePlaceholder();
     });
+
+    // Auto-resize prompt textarea up to 5 lines
+    const autoResize = () => {
+      const el = DOM.input;
+      // Reset height to compute scrollHeight correctly
+      el.style.height = "auto";
+      const maxHeight = parseFloat(getComputedStyle(el).lineHeight) * 5;
+      el.style.height = Math.min(el.scrollHeight, maxHeight) + "px";
+    };
+
+    DOM.input.addEventListener("input", autoResize);
+    // initialize
+    autoResize();
 
     // Initialize
     window.addEventListener("load", () => {

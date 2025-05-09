@@ -433,6 +433,7 @@
       if (!content) return '';
       return content
         .replace(/<think>([\s\S]*?)<\/think>/g, '<p class="think">$1</p>')
+        .replace(/<think>([\s\S]*)$/, '<div class="think">$1</div>')
         .replace(
           /```(\w*)\n([\s\S]*?)```/g,
           (_, lang, code) =>

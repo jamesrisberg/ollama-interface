@@ -108,6 +108,44 @@
         font-style: italic;
         color: #bababa;
         margin: var(--spacing-lg) 0;
+        position: relative;
+        padding-left: 1.5em;
+        overflow: hidden;
+        transition: max-height 0.2s ease-out;
+        max-height: none;
+      }
+
+      .think.collapsed {
+        max-height: 1.5em;
+        cursor: pointer;
+      }
+
+      .think.collapsing {
+        transition: max-height 0.2s ease-out;
+      }
+
+      .think::before {
+        content: '▼';
+        position: absolute;
+        left: 0;
+        top: 0.2em;
+        font-size: 0.8em;
+        transition: transform 0.2s ease;
+        cursor: pointer;
+        line-height: 1;
+        display: inline-block;
+        width: 1em;
+        height: 1em;
+        text-align: center;
+      }
+
+      .think.collapsed::before {
+        transform: rotate(-90deg);
+      }
+
+      .think.collapsed::after {
+        content: '...';
+        color: #bababa;
       }
 
       /* Form Elements */
@@ -420,6 +458,55 @@
       },
     ];
 
+    // Think div collapsing
+    function handleThinkTransition(thinkDiv, shouldCollapse) {
+      thinkDiv.classList.add('collapsing');
+
+      if (shouldCollapse) {
+        // Collapsing
+        thinkDiv.style.maxHeight = thinkDiv.scrollHeight + 'px';
+        // Force reflow
+        thinkDiv.offsetHeight;
+        requestAnimationFrame(() => {
+          thinkDiv.style.maxHeight = '1.5em';
+          thinkDiv.classList.add('collapsed');
+          setTimeout(() => {
+            thinkDiv.classList.remove('collapsing');
+          }, 300);
+        });
+      } else {
+        // Expanding
+        thinkDiv.classList.remove('collapsed');
+        const fullHeight = thinkDiv.scrollHeight;
+        requestAnimationFrame(() => {
+          thinkDiv.style.maxHeight = fullHeight + 'px';
+          setTimeout(() => {
+            thinkDiv.classList.remove('collapsing');
+            thinkDiv.style.maxHeight = 'none';
+          }, 300);
+        });
+      }
+    }
+
+    function collapseThinkDivs(container) {
+      container.querySelectorAll('.think:not(.collapsed)').forEach(thinkDiv => {
+        handleThinkTransition(thinkDiv, true);
+      });
+    }
+
+    document.addEventListener('click', e => {
+      if (e.target.classList.contains('think') || e.target.closest('.think')) {
+        const thinkDiv = e.target.classList.contains('think')
+          ? e.target
+          : e.target.closest('.think');
+
+        handleThinkTransition(
+          thinkDiv,
+          !thinkDiv.classList.contains('collapsed')
+        );
+      }
+    });
+
     // Utility functions
     const escapeHtml = unsafe =>
       unsafe
@@ -432,7 +519,7 @@
     const formatMessage = content => {
       if (!content) return '';
       return content
-        .replace(/<think>([\s\S]*?)<\/think>/g, '<p class="think">$1</p>')
+        .replace(/<think>([\s\S]*?)<\/think>/g, '<div class="think">$1</div>')
         .replace(/<think>([\s\S]*)$/, '<div class="think">$1</div>')
         .replace(
           /```(\w*)\n([\s\S]*?)```/g,

@@ -11,6 +11,17 @@
     />
     <style>
       /* CSS Custom Properties */
+
+      /* Font settings */
+      @font-face {
+        font-family: 'JetBrains Mono';
+        src: url('https://cdn.jsdelivr.net/gh/JetBrains/JetBrainsMono/web/woff2/JetBrainsMono-Regular.woff2')
+          format('woff2');
+        font-weight: normal;
+        font-style: normal;
+        font-display: swap;
+      }
+
       :root {
         --bg-color-light: #fff;
         --wash-color-light: #ededed;
@@ -18,7 +29,7 @@
         --bg-color-dark: #1a1818;
         --wash-color-dark: #2d2d2d;
         --text-color-dark: #fff;
-        --font-family: serif;
+        --font-family: 'JetBrains Mono', monospace;
         --border-radius: 1.11em;
         --spacing-sm: 0.5em;
         --spacing-md: 0.88em;
@@ -45,7 +56,7 @@
         background-color: var(--bg-color-light);
         color: var(--text-color-light);
         font-family: var(--font-family);
-        font-size: 1.23em;
+        font-size: 1em;
         -webkit-font-smoothing: antialiased;
         will-change: transform;
       }
@@ -158,7 +169,7 @@
 
       code {
         font-family: monospace;
-        font-size: 1em;
+        font-size: 0.9em;
       }
 
       pre code {
@@ -172,9 +183,6 @@
       }
 
       /* Settings menu styling */
-      #settings-button {
-        padding: 0.5em 1.11em;
-      }
 
       #settings-menu {
         position: absolute;
@@ -337,12 +345,12 @@
   <script>
     // Constants and configuration
     const CONFIG = {
-      aiName: "Oh",
-      userName: "Edouard",
-      defaultModel: "",
-      apiEndpoint: "http://localhost:11434/api",
-      nousApiEndpoint: "/nous",
-      availableModels: [{ name: "Hermes-3-Llama-3.1-70B", provider: "nous" }],
+      aiName: 'Oh',
+      userName: 'Edouard',
+      defaultModel: '',
+      apiEndpoint: 'http://localhost:11434/api',
+      nousApiEndpoint: '/nous',
+      availableModels: [{ name: 'Hermes-3-Llama-3.1-70B', provider: 'nous' }],
       systemPrompt: `Your name is Oh.
 You will respond in a moderately friendly and straightforward manner.
 Your primary goal is to act as a helpful entity, providing information and answering questions to the best of your ability.
@@ -354,34 +362,34 @@ For inline code or short code snippets, use single backticks (\`).`,
 
     // DOM elements cache
     const DOM = {
-      form: document.getElementById("prompt-form"),
-      input: document.getElementById("prompt-input"),
-      chat: document.getElementById("chat-container"),
-      modelSelector: document.getElementById("model-selector"),
+      form: document.getElementById('prompt-form'),
+      input: document.getElementById('prompt-input'),
+      chat: document.getElementById('chat-container'),
+      modelSelector: document.getElementById('model-selector'),
     };
 
     // State management
     let currentModel = CONFIG.defaultModel;
-    let currentProvider = "ollama";
+    let currentProvider = 'ollama';
     let currentChatController = null;
     let conversationHistory = [
       {
-        role: "system",
+        role: 'system',
         content: CONFIG.systemPrompt,
       },
     ];
 
     // Utility functions
-    const escapeHtml = (unsafe) =>
+    const escapeHtml = unsafe =>
       unsafe
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
 
-    const formatMessage = (content) => {
-      if (!content) return "";
+    const formatMessage = content => {
+      if (!content) return '';
       return content
         .replace(/<think>([\s\S]*?)<\/think>/g, '<p class="think">$1</p>')
         .replace(
@@ -421,7 +429,7 @@ For inline code or short code snippets, use single backticks (\`).`,
     const updatePlaceholder = () => {
       DOM.input.placeholder = currentModel
         ? `Send a message to ${currentModel}`
-        : "Download ollama models to chat";
+        : 'Download ollama models to chat';
     };
 
     const fetchAvailableModels = async () => {
@@ -432,32 +440,32 @@ For inline code or short code snippets, use single backticks (\`).`,
           throw new Error(`HTTP error! status: ${response.status}`);
 
         const { models } = await response.json();
-        const ollamaModels = models.map((model) => ({
+        const ollamaModels = models.map(model => ({
           name: model.name,
-          provider: "ollama",
+          provider: 'ollama',
         }));
 
         // Combine Ollama models with Nous Research models (if any configured)
         const allModels = [
           ...ollamaModels,
-          ...CONFIG.availableModels.filter((m) => m.provider === "nous"),
+          ...CONFIG.availableModels.filter(m => m.provider === 'nous'),
         ];
 
         if (allModels.length === 0) {
           // No models available
           DOM.modelSelector.innerHTML = `<option value="">Download ollama models to chat</option>`;
-          currentModel = "";
-          currentProvider = "ollama";
+          currentModel = '';
+          currentProvider = 'ollama';
           updatePlaceholder();
           return;
         }
 
         const modelOptions = allModels
           .map(
-            (model) =>
+            model =>
               `<option value="${model.name}" data-provider="${model.provider}">${model.name} (${model.provider})</option>`
           )
-          .join("");
+          .join('');
 
         DOM.modelSelector.innerHTML = modelOptions;
 
@@ -469,24 +477,24 @@ For inline code or short code snippets, use single backticks (\`).`,
         DOM.modelSelector.value = currentModel;
         updatePlaceholder();
       } catch (error) {
-        console.error("Error fetching models:", error);
+        console.error('Error fetching models:', error);
         DOM.modelSelector.innerHTML = `<option value="">Download ollama models to chat</option>`;
-        currentModel = "";
+        currentModel = '';
         updatePlaceholder();
       }
     };
 
     // Chat functionality
     const addMessageToChat = (role, content) => {
-      const messageDiv = document.createElement("div");
-      messageDiv.classList.add("message", `${role}-message`);
+      const messageDiv = document.createElement('div');
+      messageDiv.classList.add('message', `${role}-message`);
       messageDiv.innerHTML = formatMessage(content);
       DOM.chat.appendChild(messageDiv);
       scrollToBottom();
       return messageDiv;
     };
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async e => {
       e.preventDefault();
       const prompt = DOM.input.value.trim();
       if (!prompt) return;
@@ -496,18 +504,18 @@ For inline code or short code snippets, use single backticks (\`).`,
       }
       currentChatController = new AbortController();
 
-      addMessageToChat("user", prompt);
-      conversationHistory.push({ role: "user", content: prompt });
-      DOM.input.value = "";
+      addMessageToChat('user', prompt);
+      conversationHistory.push({ role: 'user', content: prompt });
+      DOM.input.value = '';
 
       try {
         let response;
-        if (currentProvider === "nous") {
+        if (currentProvider === 'nous') {
           // Nous Research API call - following OpenAI chat format
           response = await fetch(`${CONFIG.nousApiEndpoint}/chat/completions`, {
-            method: "POST",
+            method: 'POST',
             headers: {
-              "Content-Type": "application/json",
+              'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               model: currentModel,
@@ -520,8 +528,8 @@ For inline code or short code snippets, use single backticks (\`).`,
         } else {
           // Ollama API call
           response = await fetch(`${CONFIG.apiEndpoint}/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               model: currentModel,
               messages: conversationHistory,
@@ -533,10 +541,10 @@ For inline code or short code snippets, use single backticks (\`).`,
         if (!response.ok)
           throw new Error(`HTTP error! status: ${response.status}`);
 
-        let assistantResponse = "";
-        const assistantMessageElement = addMessageToChat("assistant", "");
+        let assistantResponse = '';
+        const assistantMessageElement = addMessageToChat('assistant', '');
 
-        if (currentProvider === "nous") {
+        if (currentProvider === 'nous') {
           const data = await response.json();
           assistantResponse = data.choices[0].message.content;
           assistantMessageElement.innerHTML = formatMessage(assistantResponse);
@@ -547,7 +555,7 @@ For inline code or short code snippets, use single backticks (\`).`,
             const { done, value } = await reader.read();
             if (done) break;
 
-            const chunks = new TextDecoder().decode(value).split("\n");
+            const chunks = new TextDecoder().decode(value).split('\n');
             for (const chunk of chunks) {
               if (!chunk.trim()) continue;
 
@@ -560,7 +568,7 @@ For inline code or short code snippets, use single backticks (\`).`,
                   scrollToBottom(true);
                 }
               } catch (parseError) {
-                console.warn("Failed to parse chunk:", parseError);
+                console.warn('Failed to parse chunk:', parseError);
               }
             }
           }
@@ -568,17 +576,17 @@ For inline code or short code snippets, use single backticks (\`).`,
         }
 
         conversationHistory.push({
-          role: "assistant",
+          role: 'assistant',
           content: assistantResponse,
         });
       } catch (error) {
-        if (error.name === "AbortError") {
-          console.log("Request cancelled");
+        if (error.name === 'AbortError') {
+          console.log('Request cancelled');
           return;
         }
-        console.error("Error:", error);
+        console.error('Error:', error);
         addMessageToChat(
-          "error",
+          'error',
           `An error occurred: ${error.message}<br>Make sure the API service is running and accessible`
         );
       } finally {
@@ -588,75 +596,75 @@ For inline code or short code snippets, use single backticks (\`).`,
     };
 
     // Settings menu functionality
-    const settingsButton = document.getElementById("settings-button");
-    const settingsMenu = document.getElementById("settings-menu");
-    const systemPromptButton = document.getElementById("system-prompt-button");
-    const systemPromptModal = document.getElementById("system-prompt-modal");
+    const settingsButton = document.getElementById('settings-button');
+    const settingsMenu = document.getElementById('settings-menu');
+    const systemPromptButton = document.getElementById('system-prompt-button');
+    const systemPromptModal = document.getElementById('system-prompt-modal');
     const systemPromptTextarea = document.getElementById(
-      "system-prompt-textarea"
+      'system-prompt-textarea'
     );
     const cancelSystemPromptButton = document.getElementById(
-      "cancel-system-prompt"
+      'cancel-system-prompt'
     );
     const saveSystemPromptButton =
-      document.getElementById("save-system-prompt");
+      document.getElementById('save-system-prompt');
 
     // Toggle settings menu
-    settingsButton.addEventListener("click", (e) => {
+    settingsButton.addEventListener('click', e => {
       e.stopPropagation();
-      settingsMenu.classList.toggle("show");
+      settingsMenu.classList.toggle('show');
     });
 
     // Close settings menu when clicking outside
-    document.addEventListener("click", (e) => {
+    document.addEventListener('click', e => {
       if (!settingsMenu.contains(e.target) && e.target !== settingsButton) {
-        settingsMenu.classList.remove("show");
+        settingsMenu.classList.remove('show');
       }
     });
 
     // System prompt modal functionality
-    systemPromptButton.addEventListener("click", () => {
+    systemPromptButton.addEventListener('click', () => {
       systemPromptTextarea.value = CONFIG.systemPrompt.trim();
-      systemPromptModal.classList.add("show");
-      settingsMenu.classList.remove("show");
+      systemPromptModal.classList.add('show');
+      settingsMenu.classList.remove('show');
     });
 
-    cancelSystemPromptButton.addEventListener("click", () => {
-      systemPromptModal.classList.remove("show");
+    cancelSystemPromptButton.addEventListener('click', () => {
+      systemPromptModal.classList.remove('show');
     });
 
-    saveSystemPromptButton.addEventListener("click", () => {
+    saveSystemPromptButton.addEventListener('click', () => {
       CONFIG.systemPrompt = systemPromptTextarea.value;
       // Reset conversation history with new system prompt
       conversationHistory = [
         {
-          role: "system",
+          role: 'system',
           content: CONFIG.systemPrompt,
         },
       ];
-      systemPromptModal.classList.remove("show");
+      systemPromptModal.classList.remove('show');
     });
 
     // Close modal when clicking outside
-    systemPromptModal.addEventListener("click", (e) => {
+    systemPromptModal.addEventListener('click', e => {
       if (e.target === systemPromptModal) {
-        systemPromptModal.classList.remove("show");
+        systemPromptModal.classList.remove('show');
       }
     });
 
     // Move model selector to settings menu
-    const modelSelector = document.getElementById("model-selector");
+    const modelSelector = document.getElementById('model-selector');
     settingsMenu.insertBefore(modelSelector, systemPromptButton);
 
     // Event Listeners
-    DOM.form.addEventListener("submit", handleSubmit);
-    DOM.input.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
+    DOM.form.addEventListener('submit', handleSubmit);
+    DOM.input.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         handleSubmit(e);
       }
     });
-    DOM.modelSelector.addEventListener("change", (e) => {
+    DOM.modelSelector.addEventListener('change', e => {
       const selectedOption = e.target.options[e.target.selectedIndex];
       currentModel = e.target.value;
       currentProvider = selectedOption.dataset.provider;
@@ -667,17 +675,17 @@ For inline code or short code snippets, use single backticks (\`).`,
     const autoResize = () => {
       const el = DOM.input;
       // Reset height to compute scrollHeight correctly
-      el.style.height = "auto";
+      el.style.height = 'auto';
       const maxHeight = parseFloat(getComputedStyle(el).lineHeight) * 5;
-      el.style.height = Math.min(el.scrollHeight, maxHeight) + "px";
+      el.style.height = Math.min(el.scrollHeight, maxHeight) + 'px';
     };
 
-    DOM.input.addEventListener("input", autoResize);
+    DOM.input.addEventListener('input', autoResize);
     // initialize
     autoResize();
 
     // Initialize
-    window.addEventListener("load", () => {
+    window.addEventListener('load', () => {
       DOM.input.focus();
       fetchAvailableModels();
     });
